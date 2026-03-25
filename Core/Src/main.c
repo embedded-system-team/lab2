@@ -21,17 +21,24 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <string.h>
+#include "lsm6dsl_reg.h"
+#include "stm32l4xx_hal.h"
+#include "b_l475e_iot01a1_bus.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct {
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+} IMUData_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define LSM6DSL_I2C_ADDR (0x6A << 1)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,7 +59,8 @@ UART_HandleTypeDef huart3;
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
-
+extern I2C_HandleTypeDef hi2c2;
+stmdev_ctx_t dev_ctx;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,12 +73,93 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 /* USER CODE BEGIN PFP */
-
+void LSM6DSL_Official_Init(void);
+void LSM6DSL_Official_Read(IMUData_t *imu_data);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/**
+ * @brief Retarget printf to UART1 (ST-Link VCP)
+ */
+int _write(int file, char *ptr, int len) {
+    HAL_UART_Transmit(&huart1, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
 
+/**
+ * @brief Platform-specific write function
+ */
+static int32_t platform_write(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
+    I2C_HandleTypeDef *hi2c = (I2C_HandleTypeDef *)handle;
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(hi2c, LSM6DSL_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, bufp, len, HAL_MAX_DELAY);
+    return (status == HAL_OK) ? 0 : -1;
+}
+
+/**
+ * @brief Platform-specific read function
+ */
+static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
+    I2C_HandleTypeDef *hi2c = (I2C_HandleTypeDef *)handle;
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(hi2c, LSM6DSL_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, bufp, len, HAL_MAX_DELAY);
+    return (status == HAL_OK) ? 0 : -1;
+}
+
+/**
+ * @brief Initialize LSM6DSL
+ */
+void LSM6DSL_Official_Init(void) {
+    dev_ctx.write_reg = platform_write;
+    dev_ctx.read_reg = platform_read;
+    dev_ctx.handle = (void *)&hi2c2;
+
+    uint8_t whoamI, rst;
+
+    lsm6dsl_device_id_get(&dev_ctx, &whoamI);
+    if (whoamI != LSM6DSL_ID) {
+        printf("Error: LSM6DSL not found. WHO_AM_I = 0x%02X\r\n", whoamI);
+        while(1);
+    }
+
+    lsm6dsl_reset_set(&dev_ctx, PROPERTY_ENABLE);
+    do {
+        lsm6dsl_reset_get(&dev_ctx, &rst);
+    } while (rst);
+
+    lsm6dsl_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
+
+    lsm6dsl_xl_full_scale_set(&dev_ctx, LSM6DSL_4g);
+    lsm6dsl_gy_full_scale_set(&dev_ctx, LSM6DSL_500dps);
+
+    lsm6dsl_xl_data_rate_set(&dev_ctx, LSM6DSL_XL_ODR_104Hz);
+    lsm6dsl_gy_data_rate_set(&dev_ctx, LSM6DSL_GY_ODR_104Hz);
+}
+
+void LSM6DSL_Official_Read(IMUData_t *imu_data) {
+    uint8_t reg;
+    int16_t data_raw_acceleration[3];
+    int16_t data_raw_angular_rate[3];
+
+    lsm6dsl_xl_flag_data_ready_get(&dev_ctx, &reg);
+    if (reg) {
+        memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
+        lsm6dsl_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
+        
+        imu_data->accel_x = lsm6dsl_from_fs4g_to_mg(data_raw_acceleration[0]) / 1000.0f;
+        imu_data->accel_y = lsm6dsl_from_fs4g_to_mg(data_raw_acceleration[1]) / 1000.0f;
+        imu_data->accel_z = lsm6dsl_from_fs4g_to_mg(data_raw_acceleration[2]) / 1000.0f;
+    }
+
+    lsm6dsl_gy_flag_data_ready_get(&dev_ctx, &reg);
+    if (reg) {
+        memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
+        lsm6dsl_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
+        
+        imu_data->gyro_x = lsm6dsl_from_fs500dps_to_mdps(data_raw_angular_rate[0]) / 1000.0f;
+        imu_data->gyro_y = lsm6dsl_from_fs500dps_to_mdps(data_raw_angular_rate[1]) / 1000.0f;
+        imu_data->gyro_z = lsm6dsl_from_fs500dps_to_mdps(data_raw_angular_rate[2]) / 1000.0f;
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -109,13 +198,28 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
+  BSP_I2C2_Init();
+  
+  printf("\r\n--- B-L475E-IOT01A1 LSM6DSL Test ---\r\n");
 
+  LSM6DSL_Official_Init();
+  printf("Sensor Initialization Success!\r\n");
+
+  IMUData_t imu_data;
+  memset(&imu_data, 0, sizeof(IMUData_t));
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    LSM6DSL_Official_Read(&imu_data);
+    
+    printf("Accel(g): [%.2f, %.2f, %.2f] | Gyro(dps): [%.2f, %.2f, %.2f]\r\n",
+           (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
+           (double)imu_data.gyro_x, (double)imu_data.gyro_y, (double)imu_data.gyro_z);
+
+    HAL_Delay(500);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
