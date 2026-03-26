@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Fix Makefile",
+            "type": "shell",
+            "command": "grep -q 'include user.mk' Makefile || sed -i '/# ASM sources/i \\# Include user-defined sources and includes\\ninclude user.mk\\nC_SOURCES += $(USER_C_SOURCES)\\nC_INCLUDES += $(USER_C_INCLUDES)\\n' Makefile",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build with Fix",
+            "type": "shell",
+            "command": "make -j$(nproc)",
+            "dependsOn": [
+                "Fix Makefile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}

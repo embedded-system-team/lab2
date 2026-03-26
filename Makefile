@@ -70,6 +70,11 @@ Core/Src/system_stm32l4xx.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c
 
+# Include user-defined sources and includes
+include user.mk
+C_SOURCES += $(USER_C_SOURCES)
+C_INCLUDES += $(USER_C_INCLUDES)
+
 # ASM sources
 ASM_SOURCES =  \
 startup_stm32l475xx.s
@@ -138,7 +143,8 @@ C_INCLUDES =  \
 -IDrivers/CMSIS/Include \
 -IDrivers/BSP/Components/lsm6dsl \
 -IDrivers/BSP/B-L475EOT01A1 \
--IDrivers/BSP/B-L475E-IOT01A1
+-IDrivers/BSP/B-L475E-IOT01A1 \
+-IDrivers/BSP/Components/es_wifi
 
 
 # compile gcc flags
