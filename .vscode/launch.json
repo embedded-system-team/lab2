@@ -16,7 +16,6 @@
                 "target/stm32l4x.cfg"
             ],
             "armToolchainPath": "/usr/bin",
-            "rtos": "FreeRTOS",
             "svdFile": "${workspaceFolder}/STM32L475.svd"
         }
     ]
