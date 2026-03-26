@@ -70,10 +70,7 @@ Core/Src/system_stm32l4xx.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c
 
-# Include user-defined sources and includes
-include user.mk
-C_SOURCES += $(USER_C_SOURCES)
-C_INCLUDES += $(USER_C_INCLUDES)
+
 
 # ASM sources
 ASM_SOURCES =  \
@@ -143,9 +140,12 @@ C_INCLUDES =  \
 -IDrivers/CMSIS/Include \
 -IDrivers/BSP/Components/lsm6dsl \
 -IDrivers/BSP/B-L475EOT01A1 \
--IDrivers/BSP/B-L475E-IOT01A1 \
--IDrivers/BSP/Components/es_wifi
+-IDrivers/BSP/B-L475E-IOT01A1
 
+# Include user-defined sources and includes
+include user.mk
+C_SOURCES += $(USER_C_SOURCES)
+C_INCLUDES += $(USER_C_INCLUDES)
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections

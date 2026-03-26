@@ -4,7 +4,7 @@
         {
             "label": "Fix Makefile",
             "type": "shell",
-            "command": "grep -q 'include user.mk' Makefile || sed -i '/# ASM sources/i \\# Include user-defined sources and includes\\ninclude user.mk\\nC_SOURCES += $(USER_C_SOURCES)\\nC_INCLUDES += $(USER_C_INCLUDES)\\n' Makefile",
+            "command": "grep -q 'include user.mk' Makefile || sed -i '/# compile gcc flags/i \\# Include user-defined sources and includes\\ninclude user.mk\\nC_SOURCES += $(USER_C_SOURCES)\\nC_INCLUDES += $(USER_C_INCLUDES)\\n' Makefile",
             "presentation": {
                 "reveal": "silent",
                 "panel": "shared"
