@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cortex Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "./build/lab2.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "servertype": "openocd",
+            "preLaunchTask": "build",
+            "device": "STM32L475VG",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32l4x.cfg"
+            ],
+            "armToolchainPath": "/usr/bin",
+            "rtos": "FreeRTOS",
+            "svdFile": "${workspaceFolder}/STM32L475.svd"
+        }
+    ]
+}
