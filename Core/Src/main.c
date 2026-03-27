@@ -26,6 +26,8 @@
 #include "lsm6dsl_reg.h"
 #include "stm32l4xx_hal.h"
 #include "b_l475e_iot01a1_bus.h"
+#include "wifi.h"
+#include "wifi_credentials.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -79,6 +81,12 @@ void LSM6DSL_Official_Read(IMUData_t *imu_data);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    if (GPIO_Pin == ISM43362_DRDY_EXTI1_Pin) {
+        SPI_WIFI_ISR();
+    }
+}
+
 /**
  * @brief Retarget printf to UART1 (ST-Link VCP)
  */
@@ -193,17 +201,39 @@ int main(void)
   MX_GPIO_Init();
   MX_DFSDM1_Init();
   MX_QUADSPI_Init();
-  MX_SPI3_Init();
+  // MX_SPI3_Init(); // Removed because WIFI_Init() handles SPI3 configuration
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
   BSP_I2C2_Init();
   
-  printf("\r\n--- B-L475E-IOT01A1 LSM6DSL Test ---\r\n");
+  printf("\r\n--- B-L475E-IOT01A1 LSM6DSL & WiFi Test ---\r\n");
 
   LSM6DSL_Official_Init();
   printf("Sensor Initialization Success!\r\n");
+
+  if (WIFI_Init() != WIFI_STATUS_OK) {
+      printf("WiFi Init Failed\r\n");
+  } else {
+      printf("WiFi Init Success\r\n");
+      if (WIFI_Connect(WIFI_SSID, WIFI_PASSWORD, WIFI_ECN_WPA2_PSK) == WIFI_STATUS_OK) {
+          printf("WiFi Connected\r\n");
+          uint8_t ip[4];
+          if (WIFI_GetIP_Address(ip, 4) == WIFI_STATUS_OK) {
+              printf("IP Address: %d.%d.%d.%d\r\n", ip[0], ip[1], ip[2], ip[3]);
+          }
+      } else {
+          printf("WiFi Connection Failed\r\n");
+      }
+  }
+
+  uint8_t server_ip[] = SERVER_IP;
+  if (WIFI_OpenClientConnection(0, WIFI_TCP_PROTOCOL, "TCP_Client", server_ip, SERVER_PORT, 0) == WIFI_STATUS_OK) {
+      printf("TCP Connection Success\r\n");
+  } else {
+      printf("TCP Connection Failed\r\n");
+  }
 
   IMUData_t imu_data;
   memset(&imu_data, 0, sizeof(IMUData_t));
@@ -211,6 +241,8 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  char wifi_data[128];
+  uint16_t sent_len;
   while (1)
   {
     LSM6DSL_Official_Read(&imu_data);
@@ -219,7 +251,16 @@ int main(void)
            (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
            (double)imu_data.gyro_x, (double)imu_data.gyro_y, (double)imu_data.gyro_z);
 
-    HAL_Delay(500);
+    // Format: AX,AY,AZ,GX,GY,GZ\n
+    int len = sprintf(wifi_data, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+            (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
+            (double)imu_data.gyro_x, (double)imu_data.gyro_y, (double)imu_data.gyro_z);
+    
+    if (WIFI_SendData(0, (uint8_t *)wifi_data, len, &sent_len, 1000) != WIFI_STATUS_OK) {
+        printf("WiFi Send Failed\r\n");
+    }
+
+    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

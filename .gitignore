@@ -27,3 +27,6 @@ Thumbs.db
 *.bak
 *~
 *.swp
+
+# WiFi Configuration
+Core/Inc/wifi_credentials.h
