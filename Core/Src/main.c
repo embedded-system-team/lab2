@@ -63,6 +63,7 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN PV */
 extern I2C_HandleTypeDef hi2c2;
 stmdev_ctx_t dev_ctx;
+volatile uint8_t sig_motion_flag = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,6 +85,8 @@ void LSM6DSL_Official_Read(IMUData_t *imu_data);
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     if (GPIO_Pin == ISM43362_DRDY_EXTI1_Pin) {
         SPI_WIFI_ISR();
+    } else if (GPIO_Pin == GPIO_PIN_11) {  /* LSM6DSL INT1 - significant motion */
+        sig_motion_flag = 1;
     }
 }
 
@@ -141,6 +144,14 @@ void LSM6DSL_Official_Init(void) {
 
     lsm6dsl_xl_data_rate_set(&dev_ctx, LSM6DSL_XL_ODR_104Hz);
     lsm6dsl_gy_data_rate_set(&dev_ctx, LSM6DSL_GY_ODR_104Hz);
+
+    /* Enable significant motion detection */
+    lsm6dsl_motion_sens_set(&dev_ctx, PROPERTY_ENABLE);
+
+    /* Route significant motion interrupt to INT1 pin (PD11) */
+    lsm6dsl_int1_ctrl_t int1_ctrl_reg = {0};
+    int1_ctrl_reg.int1_sign_mot = 1;
+    lsm6dsl_write_reg(&dev_ctx, LSM6DSL_INT1_CTRL, (uint8_t *)&int1_ctrl_reg, 1);
 }
 
 void LSM6DSL_Official_Read(IMUData_t *imu_data) {
@@ -245,8 +256,20 @@ int main(void)
   uint16_t sent_len;
   while (1)
   {
+    /* Check significant motion interrupt flag (set by EXTI callback) */
+    if (sig_motion_flag) {
+        sig_motion_flag = 0;
+
+        /* Clear interrupt latch by reading ALL_INT_SRC */
+        lsm6dsl_all_sources_t all_src;
+        lsm6dsl_all_sources_get(&dev_ctx, &all_src);
+
+        printf("*** SIGNIFICANT MOTION DETECTED ***\r\n");
+        WIFI_SendData(0, (uint8_t *)"EVENT:SIG_MOTION\n", 17, &sent_len, 1000);
+    }
+
     LSM6DSL_Official_Read(&imu_data);
-    
+
     printf("Accel(g): [%.2f, %.2f, %.2f] | Gyro(dps): [%.2f, %.2f, %.2f]\r\n",
            (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
            (double)imu_data.gyro_x, (double)imu_data.gyro_y, (double)imu_data.gyro_z);
@@ -255,7 +278,7 @@ int main(void)
     int len = sprintf(wifi_data, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
             (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
             (double)imu_data.gyro_x, (double)imu_data.gyro_y, (double)imu_data.gyro_z);
-    
+
     if (WIFI_SendData(0, (uint8_t *)wifi_data, len, &sent_len, 1000) != WIFI_STATUS_OK) {
         printf("WiFi Send Failed\r\n");
     }
